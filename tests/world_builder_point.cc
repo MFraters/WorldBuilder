@@ -298,17 +298,33 @@ TEST_CASE("WorldBuilder Utilities: Natural Coordinate")
 TEST_CASE("WorldBuilder Utilities: Coordinate systems transformations")
 {
   // Test coordinate system transformation
-  Point<3> cartesian(3,4,5);
+  {
+    Point<3> cartesian(3,4,5);
 
-  Point<3> spherical(Utilities::cartesian_to_spherical_coordinates(cartesian.get_array()), CoordinateSystem::spherical);
+    Point<3> spherical(Utilities::cartesian_to_spherical_coordinates(cartesian.get_array()), CoordinateSystem::spherical);
 
-  compare_vectors_approx(std::vector<double>(std::begin(spherical.get_array()), std::end(spherical.get_array())),
-                         std::vector<double> {std::sqrt(3*3+4*4+5*5),0.927295218001613,0.7853982});
+    compare_vectors_approx(std::vector<double>(std::begin(spherical.get_array()), std::end(spherical.get_array())),
+                           std::vector<double> {std::sqrt(3*3+4*4+5*5),0.927295218001613,0.7853982});
 
-  Point<3> cartesian_back(Utilities::spherical_to_cartesian_coordinates(spherical.get_array()), CoordinateSystem::cartesian);
+    Point<3> cartesian_back(Utilities::spherical_to_cartesian_coordinates(spherical.get_array()), CoordinateSystem::cartesian);
 
-  compare_vectors_approx(std::vector<double>(std::begin(cartesian_back.get_array()), std::end(cartesian_back.get_array())),
-                         std::vector<double> {3,4,5});
+    compare_vectors_approx(std::vector<double>(std::begin(cartesian_back.get_array()), std::end(cartesian_back.get_array())),
+                           std::vector<double> {3,4,5});
+  }
+
+  {
+    Point<3> cartesian(-2,-1,6);
+
+    Point<3> spherical(Utilities::cartesian_to_spherical_coordinates(cartesian.get_array()), CoordinateSystem::spherical);
+
+    compare_vectors_approx(std::vector<double>(std::begin(spherical.get_array()), std::end(spherical.get_array())),
+                           std::vector<double> {std::sqrt(2*2+1*1+6*6),3.60524026718,0.356733389});
+
+    Point<3> cartesian_back(Utilities::spherical_to_cartesian_coordinates(spherical.get_array()), CoordinateSystem::cartesian);
+
+    compare_vectors_approx(std::vector<double>(std::begin(cartesian_back.get_array()), std::end(cartesian_back.get_array())),
+                           std::vector<double> {-2,-1,6});
+  }
 
 
 }
@@ -324,7 +340,8 @@ TEST_CASE("WorldBuilder Utilities: ptree function")
 
 TEST_CASE("WorldBuilder C wrapper")
 {
-  std::string file = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb.json";
+  // First test a world builder file with a cross section defined
+  std::string file = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb1.json";
   void *ptr_world = NULL;
   void **ptr_ptr_world = &ptr_world;
   const char *world_builder_file = file.c_str();
@@ -349,6 +366,43 @@ TEST_CASE("WorldBuilder C wrapper")
 
   composition_2d(*ptr_ptr_world, 1, 2, 0, 2, &composition);
   REQUIRE(composition == false);
+  composition_3d(*ptr_ptr_world, 1, 2, 3, 0, 2, &composition);
+  REQUIRE(composition == false);
+  composition_3d(*ptr_ptr_world, 120e3, 500e3, 0, 0, 3, &composition);
+  REQUIRE(composition == true);
+
+  // TODO: figure out why it isn't true
+  //composition_2d(*ptr_ptr_world, 1800e3, 0, 0, 3, &composition);
+  //REQUIRE(composition == true);
+
+  release_world(*ptr_ptr_world);
+
+  // Now test a world builder file without a cross section defined
+  file = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb2.json";
+  ptr_world = NULL;
+  ptr_ptr_world = &ptr_world;
+  const char *world_builder_file2 = file.c_str();
+
+  create_world(ptr_ptr_world, world_builder_file2);
+
+
+  REQUIRE_THROWS_WITH(temperature_2d(*ptr_ptr_world, 1, 2, 0, 10, &temperature),
+                      Contains("This function can only be called when the cross section "
+                               "variable in the world builder file has been set. Dim is 3."));
+  temperature_3d(*ptr_ptr_world, 1, 2, 3, 0, 10, &temperature);
+  REQUIRE(temperature == Approx(1600));
+  temperature_3d(*ptr_ptr_world, 120e3, 500e3, 0, 0, 10, &temperature);
+  REQUIRE(temperature == Approx(150));
+
+  // TODO: figure out why it isn't 150
+  //temperature_2d(*ptr_ptr_world, 1800e3, 0, 0, 10, &temperature);
+  //REQUIRE(temperature == Approx(150));
+
+  // Test the compositions
+  REQUIRE_THROWS_WITH(composition_2d(*ptr_ptr_world, 1, 2, 0, 2, &composition),
+                      Contains("This function can only be called when the cross section "
+                               "variable in the world builder file has been set. Dim is 3."));
+
   composition_3d(*ptr_ptr_world, 1, 2, 3, 0, 2, &composition);
   REQUIRE(composition == false);
   composition_3d(*ptr_ptr_world, 120e3, 500e3, 0, 0, 3, &composition);
@@ -400,7 +454,7 @@ TEST_CASE("WorldBuilder Coordinate Systems: Cartesian")
 
 TEST_CASE("WorldBuilder Features: Interface")
 {
-  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb.json";
+  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb1.json";
   WorldBuilder::World world(file_name);
   REQUIRE_THROWS_WITH(Features::create_feature("!not_implemented_feature!", world),
                       Contains("Feature not implemented."));
@@ -412,9 +466,9 @@ TEST_CASE("WorldBuilder Features: Interface")
 
 TEST_CASE("WorldBuilder Features: Continental Plate")
 {
-  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb.json";
-  WorldBuilder::World world(file_name);
-  Features::ContinentalPlate *continental_plate = new Features::ContinentalPlate(world);
+  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb1.json";
+  WorldBuilder::World world1(file_name);
+  Features::ContinentalPlate *continental_plate = new Features::ContinentalPlate(world1);
 
   delete continental_plate;
 }
