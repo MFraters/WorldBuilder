@@ -18,9 +18,15 @@
 */
 
 #define CATCH_CONFIG_MAIN
+
+#include <boost/property_tree/json_parser.hpp>
+
 #include <catch2.h>
+
 #include <world_builder/coordinate_systems/interface.h>
 #include <world_builder/coordinate_systems/cartesian.h>
+#include <world_builder/features/interface.h>
+#include <world_builder/features/continental_plate.h>
 #include <world_builder/point.h>
 #include <world_builder/utilities.h>
 #include <world_builder/wrapper_c.h>
@@ -275,6 +281,7 @@ TEST_CASE("WorldBuilder Utilities: Natural Coordinate")
 {
   CoordinateSystems::Interface *cartesian = new CoordinateSystems::Cartesian;
 
+  // Test the natural coordinate system
   Utilities::NaturalCoordinate nca1(std::array<double,3> {1,2,3},*cartesian);
   REQUIRE(nca1.get_coordinates() == std::array<double,3> {1,2,3});
   REQUIRE(nca1.get_surface_coordinates() == std::array<double,2> {1,2});
@@ -284,6 +291,8 @@ TEST_CASE("WorldBuilder Utilities: Natural Coordinate")
   REQUIRE(ncp1.get_coordinates() == std::array<double,3> {1,2,3});
   REQUIRE(ncp1.get_surface_coordinates() == std::array<double,2> {1,2});
   REQUIRE(ncp1.get_depth_coordinate() == 3);
+
+  delete cartesian;
 }
 
 TEST_CASE("WorldBuilder Utilities: Coordinate systems transformations")
@@ -348,4 +357,65 @@ TEST_CASE("WorldBuilder C wrapper")
   // TODO: figure out why it isn't true
   //composition_2d(*ptr_ptr_world, 1800e3, 0, 0, 3, &composition);
   //REQUIRE(composition == true);
+
+  release_world(*ptr_ptr_world);
 }
+
+
+TEST_CASE("WorldBuilder Coordinate Systems: Interface")
+{
+  REQUIRE_THROWS_WITH(CoordinateSystems::create_coordinate_system("!not_implemented_coordinate_system!"),
+                      Contains("Coordinate system not implemented."));
+
+  CoordinateSystems::Interface *interface = new CoordinateSystems::Cartesian;
+
+  ptree tree;
+  std::string file_name = "";
+  interface->read(tree,file_name);
+
+  REQUIRE(interface->cartesian_to_natural_coordinates(std::array<double,3> {1,2,3}) == std::array<double,3> {1,2,3});
+  REQUIRE(interface->natural_to_cartesian_coordinates(std::array<double,3> {1,2,3}) == std::array<double,3> {1,2,3});
+
+  REQUIRE(interface->natural_coordinate_system() == CoordinateSystem::cartesian);
+
+  delete interface;
+}
+
+TEST_CASE("WorldBuilder Coordinate Systems: Cartesian")
+{
+  CoordinateSystems::Cartesian *cartesian = new CoordinateSystems::Cartesian;
+
+  ptree tree;
+  std::string file_name = "";
+  cartesian->read(tree,file_name);
+
+  REQUIRE(cartesian->cartesian_to_natural_coordinates(std::array<double,3> {1,2,3}) == std::array<double,3> {1,2,3});
+  REQUIRE(cartesian->natural_to_cartesian_coordinates(std::array<double,3> {1,2,3}) == std::array<double,3> {1,2,3});
+
+  REQUIRE(cartesian->natural_coordinate_system() == CoordinateSystem::cartesian);
+
+  delete cartesian;
+}
+
+
+TEST_CASE("WorldBuilder Features: Interface")
+{
+  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb.json";
+  WorldBuilder::World world(file_name);
+  REQUIRE_THROWS_WITH(Features::create_feature("!not_implemented_feature!", world),
+                      Contains("Feature not implemented."));
+
+  Features::Interface *interface = new Features::ContinentalPlate(world);
+
+  delete interface;
+}
+
+TEST_CASE("WorldBuilder Features: Continental Plate")
+{
+  std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/simple_wb.json";
+  WorldBuilder::World world(file_name);
+  Features::ContinentalPlate *continental_plate = new Features::ContinentalPlate(world);
+
+  delete continental_plate;
+}
+

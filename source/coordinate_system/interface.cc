@@ -42,7 +42,7 @@ namespace WorldBuilder
       if (feature_name == "cartesian")
         return new CoordinateSystems::Cartesian();
       else
-        WBAssertThrow(false, "Plugin not implemented.");
+        WBAssertThrow(false, "Coordinate system not implemented.");
 
       return NULL;
     }
